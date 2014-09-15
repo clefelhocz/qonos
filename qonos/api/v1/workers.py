@@ -17,6 +17,7 @@
 import webob.exc
 
 from qonos.api import api
+from qonos.api import limit
 from qonos.api.v1 import api_utils
 from qonos.common import exception
 from qonos.common import utils
@@ -32,6 +33,10 @@ class WorkersController(object):
 
     def __init__(self, db_api=None):
         self.db_api = db_api or qonos.db.get_api()
+        self.post_limiter = limit.Limit('POST', '.*/workers/{worker_id}/jobs',
+                                        '.*/workers/.*/jobs',
+                                        CONF.api.post_workers_jobs_rate,
+                                        CONF.api.post_workers_jobs_interval)
 
     def _get_request_params(self, request):
         params = {}
@@ -74,6 +79,11 @@ class WorkersController(object):
             raise webob.exc.HTTPNotFound(explanation=msg)
 
     def get_next_job(self, request, worker_id, body):
+        delay = self.post_limiter('POST', request.url)
+        if delay:
+            msg = _('Rate-controlling worker requests for jobs')
+            raise webob.exc.HTTPTooManyRequests(msg)
+
         action = body.get('action')
         try:
             # Check that worker exists

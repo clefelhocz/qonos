@@ -15,6 +15,7 @@
 #    under the License.
 
 import datetime
+import mock
 import uuid
 import webob.exc
 
@@ -295,3 +296,45 @@ class TestWorkersApi(test_utils.BaseTestCase):
                                            self.worker_1['id'],
                                            fixture)
         self.assertEqual(self.worker_1['id'], job['job']['worker_id'])
+
+    def test_get_next_job_for_action_limit(self):
+        now = timeutils.utcnow()
+        timeout = now + datetime.timedelta(hours=1)
+        hard_timeout = now + datetime.timedelta(hours=4)
+        fixture = {
+            'schedule_id': self.schedule_1['id'],
+            'tenant': unit_utils.TENANT1,
+            'worker_id': None,
+            'action': 'snapshot',
+            'status': None,
+            'timeout': timeout,
+            'hard_timeout': hard_timeout,
+            'retry_count': 0,
+        }
+        ids = ['fake1', 'fake2', 'fake3', 'fake4', 'fake5']
+        jobs = []
+        for id in ids:
+            jobs.append(db_api.job_create(fixture))
+
+        request = unit_utils.get_fake_request(path='/workers/fake1/jobs',
+                                              method='POST')
+        fixture = {'action': 'snapshot'}
+        with mock.patch.object(self.controller.post_limiter,
+                               '_get_time') as mock_get_time:
+            # Using defaults first 5 are accepted, 6th returns none
+            # and after 30 simulated seconds 7th returns next job
+            mock_get_time.side_effect = [1, 1, 1, 1, 1, 1, 35]
+            for id in ids:
+                job = self.controller.get_next_job(request,
+                                                   self.worker_1['id'],
+                                                   fixture)
+                self.assertEqual(self.worker_1['id'], job['job']['worker_id'])
+
+            self.assertRaises(webob.exc.HTTPTooManyRequests,
+                              self.controller.get_next_job,
+                              request, self.worker_1['id'], fixture)
+
+            job = self.controller.get_next_job(request,
+                                               self.worker_1['id'],
+                                               fixture)
+            self.assertEqual(self.worker_1['id'], job['job']['worker_id'])

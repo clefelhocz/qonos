@@ -33,7 +33,13 @@ api_opts = [
             help='A python format string that is used as the template to '
                  'generate log lines. The following values can be formatted '
                  'into it: client_ip, date_time, request_line, status_code, '
-                 'body_length, wall_seconds.'),
+               'body_length, wall_seconds.'),
+    cfg.IntOpt('post_workers_jobs_rate', default=5,
+               help='The number or rate of calls per interval we can make for'
+                    ' the POST workers/jobs REST call'),
+    cfg.IntOpt('post_workers_jobs_interval', default=15,
+               help='The interval to measure for the POST workers/jobs '
+                    ' REST call rate'),
 ]
 
 action_opts = [
