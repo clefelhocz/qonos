@@ -65,6 +65,9 @@ class Client(object):
         if response.status == 409:
             raise exception.Duplicate('Resource Exists')
 
+        if response.status == 429:
+            raise exception.TooManyRequests('Too Many Requests')
+
         if method != 'DELETE':
             body = response.read()
             if body != '':

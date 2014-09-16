@@ -29,3 +29,7 @@ class Duplicate(Exception):
 
 class BadRequest(Exception):
     pass
+
+
+class TooManyRequests(Exception):
+    pass

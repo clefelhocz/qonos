@@ -16,6 +16,7 @@
 
 import mock
 import mox
+import socket
 import time
 
 from qonos.tests.unit import utils as unit_utils
@@ -290,7 +291,7 @@ class TestWorkerWithMox(test_utils.BaseTestCase):
         self.client.create_worker(mox.IsA(str), mox.IsA(int)).\
             AndReturn(fakes.WORKER)
         self.client.get_next_job(str(fakes.WORKER_ID), mox.IsA(str)).\
-            AndRaise(Exception())
+            AndRaise(socket.error())
         self.client.get_next_job(str(fakes.WORKER_ID), mox.IsA(str)).\
             AndRaise(Exception())
         self.client.get_next_job(str(fakes.WORKER_ID), mox.IsA(str)).\
@@ -301,10 +302,15 @@ class TestWorkerWithMox(test_utils.BaseTestCase):
         self.config(job_poll_interval=5, group='worker')
         self.config(action_type='snapshot', group='worker')
 
-        fake_sleep = lambda x: None
+        sleeptime = []
+        fake_sleep = lambda x: sleeptime.append(x)
         self.stubs.Set(time, 'sleep', fake_sleep)
 
         self.worker.run(run_once=True, poll_once=False)
+        print sleeptime
+        self.assertEqual(sleeptime[0], 5)
+        self.assertTrue(600 <= sleeptime[1] and sleeptime[1] <= 605)
+        self.assertEqual(sleeptime[2], 5)
         self.assertTrue(self.processor.was_init_processor_called(1))
         self.assertTrue(self.processor.was_process_job_called(1))
         self.assertTrue(self.processor.was_cleanup_processor_called(1))

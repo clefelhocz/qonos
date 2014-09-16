@@ -16,8 +16,10 @@
 
 import errno
 import os
+from random import randint
 import signal
 import socket
+import sys
 import time
 
 from oslo.config import cfg
@@ -26,6 +28,7 @@ from qonos.common import utils
 from qonos.openstack.common.gettextutils import _
 from qonos.openstack.common import importutils
 import qonos.openstack.common.log as logging
+import qonos.qonosclient.exception as client_exception
 
 LOG = logging.getLogger(__name__)
 
@@ -47,6 +50,8 @@ worker_opts = [
                       'to use in this worker')),
     cfg.BoolOpt('fork_job_process', default=False,
                 help=_('True to fork a child process for job processing')),
+    cfg.IntOpt('max_poll', default=600,
+               help=_('Maximum backoff we should perform')),
 ]
 
 CONF = cfg.CONF
@@ -66,6 +71,7 @@ class Worker(object):
         self.running = False
         self.pid = None
         self._child_pid = None
+        self.last_measured = 0
 
     def run(self, run_once=False, poll_once=False):
         LOG.info(_('Starting qonos worker service'))
@@ -217,14 +223,25 @@ class Worker(object):
 
     def _poll_for_next_job(self, poll_once=False):
         job = None
-
+        backoff_time = CONF.worker.job_poll_interval
         while job is None and self.running:
-            time.sleep(CONF.worker.job_poll_interval)
+            time.sleep(backoff_time)
             LOG.debug(_("Attempting to get next job from API"))
             job = None
-            with utils.log_warning_and_dismiss_exception(LOG):
+            try:
                 job = self.client.get_next_job(self.worker_id,
                                                CONF.worker.action_type)['job']
+            except socket.error:
+                backoff_time = CONF.worker.max_poll + randint(
+                    0, CONF.worker.job_poll_interval)
+                name, value, tb = sys.exc_info()
+                msg = '%(name)s: %(message)s'
+                LOG.warn(msg % {"name": name.__name__, "message": value})
+            except Exception:
+                backoff_time = CONF.worker.job_poll_interval
+                name, value, tb = sys.exc_info()
+                msg = '%(name)s: %(message)s'
+                LOG.warn(msg % {"name": name.__name__, "message": value})
 
             if poll_once:
                 break
